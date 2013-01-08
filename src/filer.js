@@ -295,17 +295,22 @@ var Filer = new function() {
   var getEntry_ = function(callback, var_args) {
     var srcStr = arguments[1];
     var destStr = arguments[2];
+    var opt_cb =  (arguments[3]) ? (arguments[3]) : null;
 
     var onError = function(e) {
-      if (e.code == FileError.NOT_FOUND_ERR) {
-        if (destStr) {
-          throw new Error('"' + srcStr + '" or "' + destStr +
+      if(opt_cb) opt_cb(e);
+      else
+      {
+        if (e.code == FileError.NOT_FOUND_ERR) {
+          if (destStr) {
+            throw new Error('"' + srcStr + '" or "' + destStr +
                           '" does not exist.');
+          } else {
+            throw new Error('"' + srcStr + '" does not exist.');
+          }
         } else {
-          throw new Error('"' + srcStr + '" does not exist.');
+          throw new Error('Problem getting Entry for one or more paths.');
         }
-      } else {
-        throw new Error('Problem getting Entry for one or more paths.');
       }
     };
 
@@ -343,7 +348,6 @@ var Filer = new function() {
     if (typeof src != typeof dest) {
       throw new Error(INCORRECT_ARGS);
     }
-
     var newName = opt_newName || null;
     var deleteOrig = opt_deleteOrig != undefined ? opt_deleteOrig : false;
 
@@ -529,7 +533,10 @@ var Filer = new function() {
     if (!fs_) {
       throw new Error(FS_INIT_ERROR_MSG);
     }
-
+    if(path === '')
+    {
+      successCallback ();
+    }
     var exclusive = opt_exclusive != null ? opt_exclusive : false;
 
     var folderParts = path.split('/');
@@ -594,7 +601,7 @@ var Filer = new function() {
     } else {
       getEntry_(function(fileEntry) {
         fileEntry.file(successCallback, opt_errorHandler);
-      }, pathToFsURL_(entryOrPath));
+      }, pathToFsURL_(entryOrPath), undefined, opt_errorHandler);
     }
   };
 
@@ -803,6 +810,70 @@ var Filer = new function() {
     } else {
       cwd_.getFile(entryOrPath, {create: true, exclusive: false}, writeFile_,
                    opt_errorHandler);
+    }
+  };
+
+ /**
+    * download up and return a local url string for a given URL entry.
+    *
+    * @param {string} url a file url
+    * @param {string|FileEntry} entryOrPath A path, filesystem URL, or FileEntry
+    *     of the file to lookup.
+    * @param {Function} successCallback Success callback passed the File object.
+    * @param {Function=} opt_errorHandler Optional error callback.
+    */
+
+    Filer.prototype.download = function(remoteURL, entryOrPath, successCallback, opt_errorHandler)
+    {
+        var xhr = new XMLHttpRequest();
+        xhr.responseType='blob';
+        xhr.open("GET", remoteURL, true);
+        var tmp_filer = this;
+        xhr.onload = function(e)
+        {
+            if(this.status == 200)
+            {
+                var buff = xhr.response;
+                tmp_filer.write(entryOrPath, {data: buff, type: buff.type}, function(fileEntry, fileWriter)
+                {
+                    if(successCallback)
+                    {
+                      successCallback(fileEntry);
+                    }
+                }, opt_errorHandler);
+            }
+            else
+            {
+                if(opt_errorHandler)
+                {
+                  opt_errorHandler();
+                }
+            }
+        };
+        xhr.onerror = function (e) {if(opt_errorHandler) opt_errorHandler();};
+        xhr.send();
+    };
+
+
+ /**
+    * check if file exist
+    *
+    * @param {string} url a file url
+    * @param {Function} successCallback Success callback passed the File object.
+    * @param {Function=} opt_errorHandler Optional error callback.
+    */
+
+  Filer.prototype.exist = function(path, successCallback, opt_errorHandler)
+  {
+    if (opt_errorHandler !== null)
+    {
+      opt_errorHandler = function () {};
+    }
+    fs_.root.getFile(path, {create:false}, function() {successCallback();}, function() {opt_errorHandler();});
+    if(false)
+    {
+      var src = pathToFsURL_(path);
+      self.resolveLocalFileSystemURL(src, successCallback, opt_errorHandler);
     }
   };
 
